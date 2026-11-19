@@ -2,26 +2,25 @@ using RoomHub.Api.Common.Cqrs;
 using RoomHub.Api.Domain.Bookings;
 using RoomHub.Api.Domain.Common;
 using RoomHub.Api.Domain.Rooms;
-using RoomHub.Api.Repositories;
 
 namespace RoomHub.Api.Features.Bookings.CreateBooking;
 
 public sealed class CreateBookingHandler(
-    RoomRepository rooms,
-    BookingRepository bookings,
+    IRoomRepository rooms,
+    IBookingRepository bookings,
+    IUnitOfWork unitOfWork,
     TimeProvider timeProvider)
     : ICommandHandler<CreateBookingCommand, Booking>
 {
-    public Task<Result<Booking>> Handle(CreateBookingCommand command, CancellationToken cancellationToken)
+    public async Task<Result<Booking>> Handle(CreateBookingCommand command, CancellationToken cancellationToken)
     {
-        var room = rooms.Get(command.RoomId);
+        var room = await rooms.GetByIdAsync(command.RoomId, cancellationToken);
         if (room is null)
         {
-            return Task.FromResult(Result<Booking>.Failure(RoomErrors.NotFound));
+            return Result<Booking>.Failure(RoomErrors.NotFound);
         }
 
-        var activeBookings = bookings.ListForRoom(command.RoomId)
-            .Where(existing => existing.Status == BookingStatus.Active);
+        var activeBookings = await bookings.GetActiveByRoomIdAsync(command.RoomId, cancellationToken);
 
         var result = Booking.Create(
             room,
@@ -34,10 +33,11 @@ public sealed class CreateBookingHandler(
 
         if (result.IsFailure)
         {
-            return Task.FromResult(Result<Booking>.Failure(result.Error!));
+            return Result<Booking>.Failure(result.Error!);
         }
 
         bookings.Add(result.Value);
-        return Task.FromResult(Result<Booking>.Success(result.Value));
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<Booking>.Success(result.Value);
     }
 }
