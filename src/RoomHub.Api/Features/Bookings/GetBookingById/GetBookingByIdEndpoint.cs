@@ -1,5 +1,6 @@
-using RoomHub.Api.Models;
-using RoomHub.Api.Services;
+using RoomHub.Api.Common;
+using RoomHub.Api.Domain.Bookings;
+using RoomHub.Api.Repositories;
 
 namespace RoomHub.Api.Features.Bookings.GetBookingById;
 
@@ -11,10 +12,15 @@ public static class GetBookingByIdEndpoint
 {
     public static RouteHandlerBuilder MapGetBookingById(this IEndpointRouteBuilder app)
     {
-        return app.MapGet("/{id:guid}", (Guid id, BookingService service) =>
+        return app.MapGet("/{id:guid}", IResult (Guid id, BookingRepository bookings) =>
         {
-            var booking = service.Get(id);
-            var response = new GetBookingByIdResponse(booking.Id, booking.RoomId, booking.BookedBy, booking.StartUtc, booking.EndUtc, booking.Attendees, booking.Status);
+            var booking = bookings.Get(id);
+            if (booking is null)
+            {
+                return BookingErrors.NotFound.ToProblem();
+            }
+
+            var response = new GetBookingByIdResponse(booking.Id, booking.RoomId, booking.BookedBy, booking.Range.StartUtc, booking.Range.EndUtc, booking.Attendees, booking.Status);
             return TypedResults.Ok(response);
         });
     }
